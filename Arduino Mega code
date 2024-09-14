@@ -1,0 +1,330 @@
+//variables de distancia y tiempo
+int distancia;
+int cercania; //distancia a un cilindro o  objeto
+unsigned long tiempoTotal; //variable del tiempo total desde el encendido
+unsigned long tiempoEvento; //variable para registrar la hora de inicio de un evento
+const byte limite = 40; //distancia de separación minima en cm antes de parar
+
+unsigned long duracion = 1000; //limite de tiempo
+
+char paquete = 0;
+byte mode = 0;
+
+#include <Servo.h>
+#include <SharpIR.h>
+
+/* Modelos de sensor Sharp :
+  GP2Y0A02YK0F --> 20150  GP2Y0A21YK0F --> 1080  GP2Y0A710K0F --> 100500  GP2YA41SK0F --> 430 */
+
+// Crear nueva instancia de la clase SharpIR:
+SharpIR Infra(A0, 1080);
+Servo Puerta;
+Servo Ultra;
+
+//constantes de movimiento
+byte speed = 192; //velocidad normal
+byte slow = 128; //velocidad lenta
+byte stop = 60; //distancia maxima antes de parar
+
+//pines del ultrasonico
+byte trig = 2;
+
+//motores transversales
+byte IN1 = 9;
+byte IN2 = 8;
+//motor longitudinal
+byte IN3 = 7;
+byte IN4 = 4;
+//pines de velocidad
+//denominación para el pin conectado a ENA (transversal)
+byte ENT = 5;
+//denominación para el pin conectado a ENB (longitudinal)
+byte ENL = 3;
+
+void setup() {
+  Serial.begin(38400);
+  Puerta.attach(5); //pin de control del servo de la puerta
+  Ultra.attach(6); //pin de control del servo del ultrasonico
+  pinMode (trig, OUTPUT);
+  pinMode (echo, INPUT);
+  pinMode (IN1, OUTPUT);
+  pinMode (IN2, OUTPUT);
+  pinMode (IN3, OUTPUT);
+  pinMode (IN4, OUTPUT);
+  pinMode (ENA, OUTPUT);
+  pinMode (ENB, OUTPUT);
+}
+
+void loop() {
+  if(Serial.available() > 0){
+    paquete = Serial.read(); //se guardan los datos recibidos como el valor de la variable
+  }
+  else{
+    paquete = "A";
+  }
+
+// control remoto
+  if (mode != 0){ //interpretador de las señales recibidas por bluetooth
+    switch(paquete){
+      case 0:
+        paro();
+        break;
+      case 1:
+        avance();
+        break;
+      case 2:
+        derecha();
+        break;
+      case 3:
+        reversa();
+        break;
+      case 4:
+        izquierda();
+        break;
+      case 5:
+        Puerta.write(0); //cerrar puerta
+        break;
+      case 6:
+        Puerta.write(100); //abrir puerta, con una inclinación extra
+        break;
+      default:
+        paro();
+        break;
+
+    }
+    delay(100);
+
+  }
+
+//control automatico
+  if (mode == 0){
+    if (depositar = true){ //determinar si se está en modo exploración o deposición
+
+    //modo deposición
+
+      speed = 100; //retroceder despacio
+      reversa();
+      delay(10000); //retroceder hasta una pared si es posible
+      speed = 192; //retroceder despacio
+      avance();
+      delay(100); //avance
+      tiempoEvento = millis(); //registrar inicio ajustado del avance para evitar posibles obstaculos
+      while (distancia < limite){
+        Ultra.write(90); //posicionar sensor hacia adelante si es necesario
+        distancia = Frente(); //medir distancia constantemente
+        tiempoTotal = millis(); //registar tiempo actual hasta finalizar
+      
+
+      if (Serial.available() > 0){
+        paquete = Serial.read();
+        }
+      if (paquete = filtro) {
+        paro();
+        slow = 100;//aún menos velocidad en los lados
+
+        //centrar el robot con el deposito para depositar
+        cordenada = paquete.substring(1,3);
+        while (cordenada < 370 || ){ //ajustar la cordenada de la posicion central del cilindro
+          derecha();
+          cordenada = paquete.substring(1,3); //filtrar la cordinada de x de los mensajes recibidos
+        }
+        while (cordenada > 430){ 
+          izquierda();
+          cordenada = paquete.substring(1,3);
+        }
+        paro();
+        slow = 128;//reestablecer velocidad de los lados
+        while (distancia > 20){ //distancia necesaria para depositar objetos correctamente
+          adelante();
+          distancia = Frente(); //medir distancia constantemente
+        }
+        paro();
+        Puerta.write(100); //abrir puerta
+        speed = 100; //retroceder despacio
+        reversa();
+        delay(10000);
+        paro();
+        depositar = false; //volver a modo exploración
+        Serial.write("1"); //detectar multicolor otra vez
+
+      }
+      }
+      paro();
+      duracion = tiempoTotal - tiempoEvento;
+      reversa();
+      tiempoEvento = millis() + duracion; //registar el inicio del retroceso más el tiempo que tardó el avance
+      while (tiempoTotal < tiempoEvento){ //mientras el valor de tiempo actual sea menor al transcurrido en el avance se seguirá avanzando
+        tiempoTotal = millis();
+        delay(100);
+      }
+      Ultra.write(0);
+      distancia = sensar();
+      //implementar forma de navegación alternativa si se va a realizar en la pista
+      
+      if (distance < limite){ //si la distancia de la izquierda no es suficiente probar a la derecha
+        Ultra.write(180);
+        distancia = sensar();
+        if (distance < limite){
+        //parar todo? avanzar un poco y volverlo a intentar?
+        }
+        else{
+        derecha();
+        delay(100); //tiempo necesario para moverse un Cleo de distancia
+        paro();
+        }
+      }
+      else{ //si la distancia de la izquierda es suficiente, desplazarse y volver a avanzar
+        izquierda(); 
+        delay(100); //tiempo necesario para moverse un Cleo de distancia
+        paro(); 
+      }
+      
+    }
+    else{
+      avance();
+      tiempoEvento = millis(); //registrar inicio del avance
+      while (distancia < limite){
+        Ultra.write(90); //posicionar sensor hacia adelante si es necesario
+        distancia = Frente(); //medir distancia constantemente
+        tiempoTotal = millis(); //registar tiempo actual hasta finalizar
+        Serial.write("1")
+        if (Serial.available() > 0){
+          paquete = Serial.read();
+        }
+        else {
+          paquete = "N";
+        }
+        if (paquete.charAt(0) != "N"){ //que hacer si se detecta un color
+          paro();
+          if (paquete.charAt(0) == "V"){ //elegir un filtro para almacenar después
+              filtro = "2";}
+          if (paquete.charAt(0) == "R"){
+              filtro = "3";}
+          if (paquete.charAt(0) =="A"){
+              filtro = "4";}
+          if (paquete.charAt(0) =="M"){
+              filtro = "5";}
+          
+          Serial.write(filtro); //comunicar el filtro a la raspberry para solo detectar ese color y empezar a enviar cordenadas
+          slow = 100;//aún menos velocidad en los lados
+
+          //centrar el robot con la pieza
+          int cordenada = paquete.substring(1,3); //extraemos la cordenada x del mensaje
+          while (cordenada < 370 || ){ //ajustar la cordenada de la posicion central del cilindro
+            derecha();
+            cordenada = paquete.substring(1,3); //filtrar la cordinada de x de los mensajes recibidos
+          }
+          while (cordenada > 430){ 
+            izquierda();
+            cordenada = paquete.substring(1,3);
+          }
+          paro();
+          slow = 128;//reestablecer velocidad de los lados
+
+          //capturar objeto
+
+          while (cercania > 20){ 
+            adelante();
+            cercania = Infra.getDistance();
+          }
+          paro();
+          puerta.write(0); //objeto almacenado
+          depositar = true; //cambio en el modo de operación, se busca centrarse con el correcto deposito
+        
+        
+          break;
+        }
+        delay(100); //quiza es inecesario
+      }
+    
+      paro();
+      duracion = tiempoTotal - tiempoEvento;
+      reversa();
+      tiempoEvento = millis() + duracion; //registar el inicio del retroceso más el tiempo que tardó el avance
+      while (tiempoTotal < tiempoEvento){ //mientras el valor de tiempo actual sea menor al transcurrido en el avance se seguirá avanzando
+        tiempoTotal = millis();
+        delay(100);
+      }
+      paro();
+      Ultra.write(0);
+      distancia = sensar();
+      //implementar condicion para tener en cuenta cuantas veces se ha movido a la izquierda 
+      //o derecha para compensar en la otra direccion cuando se acabe el espacio
+      if (distance < limite){ //si la distancia de la izquierda no es suficiente probar a la derecha
+        Ultra.write(180);
+        distancia = sensar();
+        if (distance < limite){
+        //parar todo? avanzar un poco y volverlo a intentar?
+        }
+        else{
+        derecha();
+        delay(100); //tiempo necesario para moverse un Cleo de distancia
+        paro();
+        }
+      }
+      else{ //si la distancia de la izquierda es suficiente, desplazarse y volver a avanzar
+        izquierda(); 
+        delay(100); //tiempo necesario para moverse un Cleo de distancia
+        paro(); 
+      }
+    }
+    
+  }
+
+}
+
+//subrutinas de deteccion
+void Frente (){
+  int d;
+  pinMode(TRIG, OUTPUT);
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(TRIG, LOW);
+  pinMode(pingPin, INPUT);
+  TIME = pulseIn(TRIG, HIGH);
+  d = TIME/59;
+  return d;
+}
+
+
+//subrutinas de movimiento y acción
+void avance (){
+  analogWrite(ENT,speed);
+  analogWrite(ENL,speed);
+  digitalWrite(IN1,HIGH);
+  digitalWrite(IN2,LOW);
+  digitalWrite(IN3,LOW);
+  digitalWrite(IN4,LOW);
+}
+void paro (){
+  digitalWrite(IN1,LOW);
+  digitalWrite(IN2,LOW);
+  digitalWrite(IN3,LOW);
+  digitalWrite(IN4,LOW);
+}
+void reversa (){
+  analogWrite(ENT,speed);
+  analogWrite(ENL,speed);
+  digitalWrite(IN1,LOW);
+  digitalWrite(IN2,HIGH);
+  digitalWrite(IN3,LOW);
+  digitalWrite(IN4,LOW);
+}
+void derecha (){
+  analogWrite(ENT, slow);
+  analogWrite(ENL, slow);
+  digitalWrite(IN1,LOW);
+  digitalWrite(IN2,LOW);
+  digitalWrite(IN3,LOW);
+  digitalWrite(IN4,HIGH);
+}
+void izquierda (){
+  analogWrite(ENT, slow);
+  analogWrite(ENL, slow);
+  digitalWrite(IN1,LOW);
+  digitalWrite(IN2,LOW);
+  digitalWrite(IN3,HIGH);
+  digitalWrite(IN4,LOW);
+}
