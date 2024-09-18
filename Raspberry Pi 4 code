@@ -1,0 +1,133 @@
+import cv2
+import numpy as np
+import serial
+import time
+
+tiempo_anterior = int(0)
+mensaje_azul = ""
+mensaje_amarillo = ""
+mensaje_rojo = ""
+mensaje_verde = ""
+
+# Definimos el puerto de la cámara a emplear         
+cap = cv2.VideoCapture(cv2.CAP_V4L2)
+
+# Configurar el puerto serie
+#ser = serial.Serial('/dev/ttyACM0', 9600)  # Asegúrate de usar el puerto serie correcto y la velocidad de baudios correcta
+#ser.flushInput()
+
+# Definimos una función para detectar colores y graficar contornos
+def draw(mask, color):
+    global mensaje_azul, mensaje_amarillo, mensaje_rojo, mensaje_verde
+    contornos,_ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    mensaje_azul = ""
+    for c in contornos:
+        area = cv2.contourArea(c)
+        if area > 1000:    
+            M = cv2.moments(c)
+            if (M["m00"] == 0):
+                M["m00"] = 1
+                
+            x = int(M["m10"]/M["m00"])
+            y = int(M["m01"]/M["m00"])
+            
+            #--- Dibujamos los contornos seleccionados ---
+            newContorno = cv2.convexHull(c)
+             
+            #--- Dibujamos un punto de r=7 y color verde ---
+            cv2.circle(frame, (x, y), 7, (0, 255, 0), -1)
+            
+            # Puntos, ubicación, fuente, grosor, color, tamaño
+            cv2.putText(frame, '{}, {}'.format(x, y), (x+10, y), font, 0.75, (0, 255, 0), 1, cv2.LINE_AA)
+            cv2.drawContours(frame, [newContorno], 0, color, 3)
+            
+            # Leemos y almacenamos la lectura por el puerto serie
+            dato_entrada_byte = ser.readline()
+            dato_entrada = dato_entrada_byte.decode('utf-8').strip()
+        
+            # Enviar datos al Arduino según el color detectado
+            if dato_entrada == "1":  # Comparar como cadena
+                if color == (255, 0, 0):
+                    mensaje_azul = "A,{},{}".format(x, y)
+                
+                elif color == (0, 255, 255):
+                    mensaje_amarillo = "M,{},{}".format(x, y)
+                    ser.write(mensaje_amarillo.encode('utf-8'))
+                        
+                elif color == (0, 0, 255):
+                    mensaje_rojo = "R,{},{}".format(x, y)
+                    ser.write(mensaje_rojo.encode('utf-8'))
+                        
+                elif color == (0, 255, 0):
+                    mensaje_verde = "V,{},{}".format(x, y)
+                    ser.write(mensaje_verde.encode('utf-8'))
+
+# Tipo de fuente del texto empleado
+font= cv2.FONT_HERSHEY_SIMPLEX
+
+# Máscara de colores a detectar (en formato o matriz HSV)
+# Azul
+azulBajo = np.array([90, 0, 0], np.uint8)
+azulAlto = np.array([140, 255, 255], np.uint8)
+
+# Amarillo
+amarilloBajo = np.array([20, 0, 0], np.uint8)
+amarilloAlto = np.array([38, 255, 255], np.uint8)
+
+# Rojo
+rojoBajo1 = np.array([0, 0, 0], np.uint8)
+rojoAlto1 = np.array([10, 255, 255], np.uint8)
+
+rojoBajo2 = np.array([170, 0, 0], np.uint8)
+rojoAlto2 = np.array([179, 255, 255], np.uint8)
+
+# Verde
+verdeBajo1 = np.array([45, 100, 0], np.uint8)
+verdeAlto1 = np.array([68, 255, 255], np.uint8)
+
+# Mientras está activada la captura de video
+while True:
+    
+    # Obtenemos un valor booleano e imagen
+    ret, frame = cap.read()
+
+    # Si hay imagen capturada
+    if ret == True:
+
+        # Pasamos de BGR a HSV
+        frameHSV = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        
+        # Asignamos las rangos de trabajo a su variable y generamos la máscara
+        maskAzul = cv2.inRange(frameHSV, azulBajo, azulAlto)
+        maskAmarillo = cv2.inRange(frameHSV, amarilloBajo, amarilloAlto)
+        maskRojo1 = cv2.inRange(frameHSV, rojoBajo1, rojoAlto1)
+        maskRojo2 = cv2.inRange(frameHSV, rojoBajo2, rojoAlto2)
+        maskRojo = cv2.add(maskRojo1, maskRojo2)
+        maskVerde = cv2.inRange(frameHSV, verdeBajo1, verdeAlto1)
+        
+        # Mostramos los valores con el color definido
+        draw(maskAzul, (255, 0, 0))
+        draw(maskAmarillo, (0, 255, 255))
+        draw(maskRojo, (0, 0, 255))
+        draw(maskVerde, (0, 255, 0))
+        
+        # Mostramos la ventana de captura
+        cv2.imshow('Captura de video', frame)
+        
+        currentTime = int(time.time() * 1000) % 100000
+        interval = 1000
+            
+        if (currentTime - tiempo_anterior) >= interval:
+            tiempo_anterior = currentTime
+            if mensaje_azul:
+                print(mensaje_azul)
+                ser.write(mensaje_azul.encode('utf-8'))
+        
+        # Detenemos la visualización con la tecla 's'
+        if cv2.waitKey(1) & 0xFF == ord('s'):
+            break
+
+# Detenemos la captura de video
+cap.release()
+# Cerramos todas las ventanas
+cv2.destroyAllWindows()
